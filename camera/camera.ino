@@ -31,7 +31,7 @@
 // ===========================
 const char* ssid = "HUEHUEHUE";
 const char* password = "abc123456";
-const char *url = "http://192.168.137.1:8000/mosquito/create"; 
+const char *url = "https://coastal-glass-406508.df.r.appspot.com/mosquito/create?width=50&height=50"; //&image_only=true
 const char *secret_key = "7Xh#bl4Kt8}J#,zNAp%#QpzNEXJKQ";
 
 void setup() {
@@ -65,7 +65,7 @@ void setup() {
   config.fb_location = CAMERA_FB_IN_PSRAM;
   config.jpeg_quality = 12;
   config.fb_count = 1;
-  
+
   // camera init
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
@@ -94,7 +94,7 @@ void setup() {
   Serial.println("");
   Serial.println("WiFi connected");
   pinMode(LED_GPIO_NUM, OUTPUT);
-  for (int brightness = 0; brightness <= 150; brightness++) {
+  for (int brightness = 0; brightness <= 50; brightness++) {
     analogWrite(LED_GPIO_NUM, brightness); // Set the LED brightness
     delay(1); // Delay to observe the change in brightness
   }
@@ -103,30 +103,51 @@ void setup() {
 
 
 void loop() {
-  
 
+  camera_fb_t *fb = NULL;
 
+  fb = esp_camera_fb_get();
+  //   if(fb==NULL) return;
   HTTPClient http;
   http.begin(url); //HTTP
-  
-  camera_fb_t *fb = esp_camera_fb_get();
- String base64Image = base64::encode(fb->buf, fb->len);
- 
- String payload = "{\"image\": \"" + base64Image  + "\", \"secret_key\": \"" + secret_key + "\"}";
+
+  String base64Image = base64::encode(fb->buf, fb->len);
+  esp_camera_fb_return(fb);
+
+  String payload = "{\"image\": \"" + base64Image  + "\", \"secret_key\": \"" + secret_key + "\"}";
 
   http.addHeader("Content-Type", "application/json");
-  
- int httpCode = http.sendRequest("POST", payload); 
+
+  int httpCode = http.sendRequest("POST", payload);
   if (httpCode > 0)
   {
     // HTTP header has been send and Server response header has been handled
     Serial.printf("[HTTP] POST... code: %d\n", httpCode);
 
     // file found at server
-    if (httpCode == HTTP_CODE_OK)
+    if (httpCode == HTTP_CODE_CREATED )
     {
-      String payload = http.getString();
-      Serial.println(payload);
+
+      WiFiClient stream = http.getStream();
+
+//      while (stream.connected()) {
+//        while (stream.available()) {
+//            uint8_t buffer[256];
+//            size_t len = stream.readBytes(buffer, sizeof(buffer));
+//            Serial.write(buffer, len);
+//        }
+//    }
+    
+          size_t len = stream.available();
+          uint8_t* buffer = new uint8_t[len];
+          stream.readBytes(buffer, len);
+          Serial.write(buffer, len);
+//          delete[] buffer;
+      
+//      String response = http.getString();
+//      response.remove(0, 1);
+//      response.remove(response.length() - 1);
+//      Serial.println("PAYLOAD" + response);
     }
   }
   else
