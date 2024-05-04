@@ -1,4 +1,4 @@
-#include "esp_camera.h"
+ #include "esp_camera.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include "base64.h"
@@ -25,13 +25,16 @@
 
 #define LED_GPIO_NUM       4
 
+#define DETECTION_ERROR_PIN 13
+#define DETECTION_REQUEST_PIN 12
+#define DETECTION_SUCCESS_PIN 15
 
 // ===========================
 // Enter your WiFi credentials
 // ===========================
 const char* ssid = "HUEHUEHUE";
 const char* password = "abc123456";
-const char *url = "https://coastal-glass-406508.df.r.appspot.com/mosquito/create?width=50&height=50"; //&image_only=true
+const char *url = "https://api.scale-anti-mosquito.site/v1/mosquito/create"; //&image_only=true
 const char *secret_key = "7Xh#bl4Kt8}J#,zNAp%#QpzNEXJKQ";
 
 void setup() {
@@ -66,10 +69,18 @@ void setup() {
   config.jpeg_quality = 12;
   config.fb_count = 1;
 
-  // camera init
+  pinMode(DETECTION_ERROR_PIN, OUTPUT);
+  pinMode(DETECTION_REQUEST_PIN, OUTPUT);
+  pinMode(DETECTION_SUCCESS_PIN, OUTPUT);
+
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x", err);
+    while(true){
+      onDetectionLeds();
+      delay(250);
+      resetDetectionLeds();
+    }
     return;
   }
 
@@ -83,6 +94,7 @@ void setup() {
 
 
 
+  onDetectionLeds();
   WiFi.begin(ssid, password);
   WiFi.setSleep(false);
 
@@ -91,69 +103,99 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("");
-  Serial.println("WiFi connected");
-  pinMode(LED_GPIO_NUM, OUTPUT);
-  for (int brightness = 0; brightness <= 50; brightness++) {
-    analogWrite(LED_GPIO_NUM, brightness); // Set the LED brightness
-    delay(1); // Delay to observe the change in brightness
-  }
+  Serial.println("Wifi connected");
+  resetDetectionLeds();
 
+//  pinMode(LED_GPIO_NUM, OUTPUT);
+//  for (int brightness = 0; brightness <= 1; brightness++) {
+//    analogWrite(LED_GPIO_NUM, brightness); // Set the LED brightness
+//    delay(1); // Delay to observe the change in brightness
+//  }
+
+  
 }
 
+void onDetectionLeds(){
+  digitalWrite(DETECTION_ERROR_PIN, HIGH);
+  digitalWrite(DETECTION_REQUEST_PIN, HIGH);
+  digitalWrite(DETECTION_SUCCESS_PIN, HIGH);
+}
 
-void loop() {
+void resetDetectionLeds(){
+  digitalWrite(DETECTION_ERROR_PIN, LOW);
+  digitalWrite(DETECTION_REQUEST_PIN, LOW);
+  digitalWrite(DETECTION_SUCCESS_PIN, LOW);
+}
 
+void uploadDetectionData(){
   camera_fb_t *fb = NULL;
-
   fb = esp_camera_fb_get();
-  //   if(fb==NULL) return;
+  if(fb==NULL){
+    digitalWrite(DETECTION_ERROR_PIN, HIGH);
+  }
+
+  digitalWrite(DETECTION_REQUEST_PIN, HIGH);
+  Serial.println("starting request");
   HTTPClient http;
   http.begin(url); //HTTP
-
+  http.setTimeout(5000);
   String base64Image = base64::encode(fb->buf, fb->len);
   esp_camera_fb_return(fb);
-
+ 
   String payload = "{\"image\": \"" + base64Image  + "\", \"secret_key\": \"" + secret_key + "\"}";
 
   http.addHeader("Content-Type", "application/json");
 
   int httpCode = http.sendRequest("POST", payload);
-  if (httpCode > 0)
-  {
-    // HTTP header has been send and Server response header has been handled
-    Serial.printf("[HTTP] POST... code: %d\n", httpCode);
-
-    // file found at server
-    if (httpCode == HTTP_CODE_CREATED )
-    {
-
-      WiFiClient stream = http.getStream();
-
-//      while (stream.connected()) {
-//        while (stream.available()) {
-//            uint8_t buffer[256];
-//            size_t len = stream.readBytes(buffer, sizeof(buffer));
-//            Serial.write(buffer, len);
-//        }
-//    }
-    
-          size_t len = stream.available();
-          uint8_t* buffer = new uint8_t[len];
-          stream.readBytes(buffer, len);
-          Serial.write(buffer, len);
-//          delete[] buffer;
-      
-//      String response = http.getString();
-//      response.remove(0, 1);
-//      response.remove(response.length() - 1);
-//      Serial.println("PAYLOAD" + response);
-    }
-  }
-  else
-  {
-    Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
+  digitalWrite(DETECTION_REQUEST_PIN, LOW);
+  if (httpCode == HTTP_CODE_CREATED ){
+    Serial.println("sucessfully created");
+    digitalWrite(DETECTION_SUCCESS_PIN, HIGH);
+  } else {
+    Serial.println("Error has occurred");
+    Serial.println(httpCode);
+    Serial.println(http.getString() );
+    digitalWrite(DETECTION_ERROR_PIN, HIGH);
   }
   http.end();
+
+  delay(500);
+//  if (httpCode > 0)
+//  {
+//    // HTTP header has been send and Server response header has been handled
+//    Serial.printf("[HTTP] POST... code: %d\n", httpCode);
+//
+//    // file found at server
+//    if (httpCode == HTTP_CODE_CREATED )
+//    {
+//
+//      WiFiClient stream = http.getStream();
+//          size_t len = stream.available();
+//          uint8_t* buffer = new uint8_t[len];
+//          stream.readBytes(buffer, len);
+//          Serial.write(buffer, len);
+//
+//    }
+//  }
+//  else
+//  {
+//    Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
+//  }
+  
+}
+
+void loop() {
+  resetDetectionLeds();
+
+  if(WiFi.status()== WL_CONNECTED){
+    uploadDetectionData();
+  } else {
+    onDetectionLeds();
+  }
+
+  return;
+  
+
+  
 
 }
