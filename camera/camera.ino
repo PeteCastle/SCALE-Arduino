@@ -129,11 +129,16 @@ void resetDetectionLeds(){
 
 void uploadDetectionData(){
   camera_fb_t *fb = NULL;
+  analogWrite(LED_GPIO_NUM, 150);
+  delay(200);
   fb = esp_camera_fb_get();
   if(fb==NULL){
     digitalWrite(DETECTION_ERROR_PIN, HIGH);
+    analogWrite(LED_GPIO_NUM, 0);
+    return;
   }
-
+  analogWrite(LED_GPIO_NUM, 0);
+  
   digitalWrite(DETECTION_REQUEST_PIN, HIGH);
   Serial.println("starting request");
   HTTPClient http;
